@@ -23,7 +23,7 @@ transform = transforms.Compose([
 def get_categories_from_csv():
     categories = []
 
-    with open('categories.csv', newline='') as csvfile:
+    with open(settings.BASE_DIR + '\\categories.csv', newline='') as csvfile:
         csvreader = csv.reader(csvfile)
         for row in csvreader:
             categories.append(row[0])  # Assuming categories are in the first column
@@ -31,7 +31,7 @@ def get_categories_from_csv():
     return categories
 
 def add_category_to_csv(category):
-    with open('categories.csv', 'r') as file:
+    with open(settings.BASE_DIR + '\\categories.csv', 'r') as file:
         reader = csv.reader(file)
         for row in reader:
             if category == row[0]:
