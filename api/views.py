@@ -81,6 +81,9 @@ class DeleteCategoryView(View):
         
 class TrainImageView(View):
     def post(self, request):
+        models_dir = os.path.join(settings.BASE_DIR, 'models')
+        if not os.path.exists(models_dir):
+            os.makedirs(models_dir)
         category = request.POST.get('categorySelect')
         upload_files = request.FILES.getlist('files')
         uploaded_images = []
