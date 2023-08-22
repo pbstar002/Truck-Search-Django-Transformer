@@ -22,7 +22,7 @@ MEDIA_URL = '/media/'
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = "django-insecure-(myazr)5+_2jkh-bc4olvz_4kos(2d5c_1=9=*%5r1x_d#!!k%"
-
+DATA_UPLOAD_MAX_NUMBER_FILES = 10000
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
