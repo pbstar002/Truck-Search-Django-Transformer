@@ -47,6 +47,9 @@ class SearchView(View):
 class GetCategoryCountView(View):
     def get(self, request):
         base_path = os.path.join(settings.MEDIA_ROOT, 'ImageSearch', 'train_datasets')
+        if not os.path.exists(base_path):
+            os.makedirs(base_path)
+        base_path = os.path.join(settings.MEDIA_ROOT, 'ImageSearch', 'train_datasets')
         categories = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
         counts = {}
         for category in categories:
