@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% csrf_token %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imagify Search</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .upload-area {
+            border: 2px dashed grey;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+
+        .gallery-item {
+            background-color: grey;
+            width: 150px;
+            height: 150px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .gallery-title {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.7);
+        }
+
+        .radio-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+        }
+    </style>
+</head>
+<body class="container mt-5">
+
+<header class="d-flex justify-content-between align-items-center p-3 bg-light rounded">
+    <h1>Imagify Search <br> Version 2.31</h1>
+    <a href="/train" class="text-light"><button class="btn btn-primary">Train</button></a>
+</header>
+
+<div class="row mt-4">
+    <div class="col-md-3">
+        <select name="category" class="form-control mb-3">
+            <option value="All">All</option>
+            {% for category in categories %}
+                <option value="{{ category }}">{{ category }}</option>
+            {% endfor %}
+        </select>
+
+        <div class="upload-area mb-3" onclick="document.getElementById('fileInput').click()">
+            Drop or select an image
+        </div>
+        <input type="file" id="fileInput" style="display: none;" onchange="showPreview(this)">
+        <span id="upload-error" class="text-danger"></span>
+
+        <button class="btn btn-success w-100" onclick="handleSearch()">Search</button>
+    </div>
+
+    <div class="col-md-9">
+        <!-- Gallery placeholder here -->
+
+        <div class="d-flex flex-wrap justify-content-between">
+            {% for _ in "1234567890"|make_list %}
+            <div class="gallery-item mb-2 position-relative">
+                <img src="https://via.placeholder.com/100" alt="Placeholder Image">
+                <input type="radio" class="radio-button" name="galleryRadio">
+                <div class="gallery-title">Image Title</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <button class="btn btn-info mt-3 w-100" onclick="handleDetailSearch()">Select for details</button>
+    </div>
+
+</div>
+<!-- Image Modal -->
+<div class="modal fade" id="imageModal" tabindex="-1" role="dialog" aria-labelledby="imageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-body">
+                <img src="" id="modalImage" class="img-fluid">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function showModalWithImage(src) {
+        const modalImage = document.getElementById('modalImage');
+        modalImage.src = src;
+        $('#imageModal').modal('show');
+    }
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                // Does this cookie string begin with the name we want?
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const csrftoken = getCookie('csrftoken');
+
+    function handleDetailSearch() {
+        // Get the selected image
+        const selectedImage = document.querySelector('input[name="galleryRadio"]:checked');
+
+        if (!selectedImage) {
+            alert("Please select an image first.");
+            return;
+        }
+
+        const galleryTitle = selectedImage.parentElement.querySelector('.gallery-title').textContent;
+        // Assuming the format is 'Category: [CATEGORY] | Score: [SCORE]'
+        const categoryName = galleryTitle.split('|')[0].replace('Category: ', '').trim();
+
+        // Now, use this category name to search similar images within the specific model using the uploaded image
+
+        // Using FormData to send image and category
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', csrftoken);
+        formData.append('image', document.getElementById('fileInput').files[0]);
+        formData.append('category', categoryName);
+
+        fetch('/api/search', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Accept': 'application/json',
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            const galleryContainer = document.querySelector('.d-flex.flex-wrap.justify-content-between');
+            galleryContainer.innerHTML = ''; // Clear current images
+            
+            data.similar_images.forEach(imgData => {
+                const galleryItem = document.createElement('div');
+                galleryItem.classList.add('gallery-item', 'mb-2', 'position-relative');
+                
+                const imgElement = document.createElement('img');
+                imgElement.addEventListener('click', function() {
+                    showModalWithImage(imgElement.src);
+                });
+                imgElement.src = imgData[0].replace('\\\\', '/'); // Assuming this is the image path
+                imgElement.alt = 'Similar Image';
+                
+                const radioButton = document.createElement('input');
+                radioButton.type = 'radio';
+                radioButton.classList.add('radio-button');
+                radioButton.name = 'galleryRadio';
+                
+                const galleryTitle = document.createElement('div');
+                galleryTitle.classList.add('gallery-title');
+                // Extract category from the image path
+                const category = imgData[0].split('\\')[3];
+                galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
+                
+                
+                galleryItem.appendChild(imgElement);
+                galleryItem.appendChild(radioButton);
+                galleryItem.appendChild(galleryTitle);
+                
+                galleryContainer.appendChild(galleryItem);
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+
+    function showPreview(input) {
+        const file = input.files[0];
+        const previewArea = document.querySelector('.upload-area');
+        const uploadError = document.getElementById('upload-error');
+
+        if (file) {
+            if (['image/jpeg', 'image/png', 'image/gif'].includes(file.type) && file.size <= 5000000) { // Check for file type and size (5MB max)
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewArea.style.backgroundImage = `url(${e.target.result})`;
+                    previewArea.textContent = ''; // Clear the default text
+                };
+                reader.readAsDataURL(file);
+            } else {
+                uploadError.textContent = 'Invalid file type or file too large. Please upload a valid image (5MB max).';
+            }
+        } else {
+            previewArea.style.backgroundImage = '';
+            previewArea.textContent = 'Drop or select an image';
+            uploadError.textContent = '';
+        }
+    }
+
+    function handleSearch() {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', csrftoken);
+        formData.append('image', document.getElementById('fileInput').files[0]);
+        formData.append('category', document.querySelector('select[name="category"]').value);
+
+        fetch('/api/search', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Accept': 'application/json',
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            const galleryContainer = document.querySelector('.d-flex.flex-wrap.justify-content-between');
+            galleryContainer.innerHTML = ''; // Clear current images
+            
+            data.similar_images.forEach(imgData => {
+                const galleryItem = document.createElement('div');
+                galleryItem.classList.add('gallery-item', 'mb-2', 'position-relative');
+                
+                const imgElement = document.createElement('img');
+                imgElement.addEventListener('click', function() {
+                    showModalWithImage(imgElement.src);
+                });
+                imgElement.src = imgData[0].replace('\\\\', '/'); // Assuming this is the image path
+                imgElement.alt = 'Similar Image';
+                
+                const radioButton = document.createElement('input');
+                radioButton.type = 'radio';
+                radioButton.classList.add('radio-button');
+                radioButton.name = 'galleryRadio';
+                
+                const galleryTitle = document.createElement('div');
+                galleryTitle.classList.add('gallery-title');
+                // Extract category from the image path
+                const category = imgData[0].split('\\')[3];
+                galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
+                
+                
+                galleryItem.appendChild(imgElement);
+                galleryItem.appendChild(radioButton);
+                galleryItem.appendChild(galleryTitle);
+                
+                galleryContainer.appendChild(galleryItem);
+            });
+
+        })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+    }
+</script>
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

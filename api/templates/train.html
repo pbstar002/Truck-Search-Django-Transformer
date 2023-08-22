@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {% csrf_token %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Imagify Train</title>
+    <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+</head>
+
+<body class="container mt-5">
+
+<header>
+    <h1>Training Center</h1>
+</header>
+
+<div class="mt-4">
+    <div class="form-group">
+        <label>Select Category</label>
+        <div class="input-group">
+            <select class="custom-select" id="categorySelect" onchange="handleCategorySelection()">
+                <option value="select">Select Category</option>
+                <option value="add_new">+ Add Category</option>
+                {% for category in categories %}
+                    <option value="{{ category }}">{{ category }}</option>
+                {% endfor %}
+            </select>
+            
+            <div class="input-group-append">
+                <button class="btn btn-danger" onclick="removeCategory()">Remove</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <input type="file" id="trainImageInput" multiple>
+    </div>
+    <div class="d-flex align-items-center w-25">
+        <button class="btn btn-primary w-100" onclick="trainImage()">Train</button>
+    </div>
+</div>
+
+<h2 class="mt-5">Training Data</h2>
+<table class="table table-striped mt-3">
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Number of Images Trained</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Dynamic rows based on trained images will be added here -->
+    </tbody>
+</table>
+<!-- Modal for Add Category -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1" aria-labelledby="addCategoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addCategoryModalLabel">Add Category</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="newCategoryInput" class="form-control" placeholder="Category Name">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="addCategory()">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                // Does this cookie string begin with the name we want?
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function handleCategorySelection() {
+        let selectElem = document.getElementById('categorySelect');
+        let selectedValue = selectElem.options[selectElem.selectedIndex].value;
+        if (selectedValue === 'add_new') {
+            showAddCategoryModal();
+            // Reset the dropdown to default after opening the modal
+            selectElem.selectedIndex = 0;
+        }
+    }
+    const csrftoken = getCookie('csrftoken');
+    document.getElementById('categorySelect').addEventListener('change', function() {
+        if (this.value === 'add_new') {
+            showAddCategoryModal();
+            // Reset the dropdown to default option to make sure this can be triggered again.
+            this.value = '';
+        }
+    });
+    function showAddCategoryModal() {
+        $('#addCategoryModal').modal('show');
+    }
+
+    function addCategory() {
+        let newCategory = document.getElementById('newCategoryInput').value;
+        if (newCategory) {
+        fetch('/api/add_category', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,  // Assuming csrftoken is globally available
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ category: newCategory })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update the dropdown list here
+                let categorySelect = document.getElementById('categorySelect');
+                let newOption = document.createElement('option');
+                newOption.value = newCategory;
+                newOption.text = newCategory;
+                categorySelect.insertBefore(newOption, categorySelect.lastChild);
+                
+                document.getElementById('newCategoryInput').value = '';  // Clear input field
+                $('#addCategoryModal').modal('hide');  // Hide modal
+                alert(data.message);  // Show success message
+            } else {
+                alert(data.message);  // Show error message
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error adding category. Please try again.');
+        });
+    }
+    }
+
+    function removeCategory() {
+    let selectElem = document.getElementById('categorySelect');
+    let selectedOption = selectElem.options[selectElem.selectedIndex];
+
+    // Make sure "Add Category" is not selected
+    if(selectedOption.value !== 'add_new' && selectedOption.value !== 'Select Category'){
+        let selectedValue = selectedOption.value;
+
+        // Send a request to delete from the backend
+        fetch('/api/delete_category', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 'category': selectedValue })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove the option from the select
+                selectElem.removeChild(selectedOption);
+                alert('Category successfully deleted!');
+            } else {
+                console.error('Error removing category');
+                alert('Error removing category: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error occurred while trying to remove category.');
+        });
+    } else {
+        alert('Please select a category to delete.');
+    }
+}
+
+    function updateImageCountTable() {
+        fetch('/api/get_category_counts')
+        .then(response => response.json())
+        .then(data => {
+            // Assuming data is an object with categories as keys and counts as values
+            let tableBody = document.querySelector("table tbody");
+            
+            // Clear previous rows
+            tableBody.innerHTML = "";
+
+            for (let category in data) {
+                let row = tableBody.insertRow();
+                let cell1 = row.insertCell(0);
+                let cell2 = row.insertCell(1);
+                cell1.innerHTML = category;
+                cell2.innerHTML = data[category];
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching category counts:', error);
+            alert('Error occurred while fetching category counts.');
+        });
+    }
+
+    function trainImage() {
+        let files = document.getElementById('trainImageInput').files;
+
+        // Create a FormData object
+        let formData = new FormData();
+        let category = document.getElementById('categorySelect').value;
+        formData.append('categorySelect', category);
+        // Append each file to the FormData object
+        for (let i = 0; i < files.length; i++) {
+            formData.append('files', files[i]);
+        }
+
+        // Add any other data you need to the FormData object
+        // formData.append('otherData', 'example');
+
+        // Send the FormData object to your backend using Fetch API or other methods
+        fetch('/api/train_image', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrftoken
+            },
+            body: formData  // don't set 'Content-Type' header when sending FormData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Images uploaded successfully!');
+            } else {
+                updateImageCountTable();
+                alert('Images are trained successfully!');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error occurred while trying to upload images.');
+        });
+}
+
+</script>
+<!-- Add these at the end of your HTML body, right before the closing </body> tag. -->
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,8 @@
+Django
+django-cors-headers
+djangorestframework
+Pillow
+scikit-learn
+timm
+torchvision
+gunicorn
