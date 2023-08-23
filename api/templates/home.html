@@ -257,7 +257,7 @@
                 const galleryTitle = document.createElement('div');
                 galleryTitle.classList.add('gallery-title');
                 // Extract category from the image path
-                const category = imgData[0].split('\\')[3];
+                const category = imgData[0].split('/')[3];
                 galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
                 
                 
