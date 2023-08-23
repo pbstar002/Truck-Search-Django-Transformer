@@ -89,7 +89,7 @@ def find_similar_images(query_img_path, img_features):
     return sorted_similarities
 
 def fn_search(model_name, query_image):
-    model_name = "models\\"  +  model_name
+    model_name = "models/"  +  model_name
 
     model_path = os.path.join(settings.BASE_DIR, model_name)
     # Load features from file
