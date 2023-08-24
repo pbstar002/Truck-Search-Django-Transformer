@@ -70,7 +70,7 @@
         <input type="file" id="fileInput" style="display: none;" onchange="showPreview(this)">
         <span id="upload-error" class="text-danger"></span>
 
-        <button class="btn btn-success w-100" onclick="handleSearch()">Search</button>
+        <button class="btn btn-success w-100" id="searchButton" onclick="handleSearch()">Search</button>
     </div>
 
     <div class="col-md-9">
@@ -86,7 +86,7 @@
             {% endfor %}
         </div>
 
-        <button class="btn btn-info mt-3 w-100" onclick="handleDetailSearch()">Select for details</button>
+        <button class="btn btn-info mt-3 w-100" id="detailSearchButton" onclick="handleDetailSearch()">Select for details</button>
     </div>
 
 </div>
@@ -128,73 +128,76 @@
     const csrftoken = getCookie('csrftoken');
 
     function handleDetailSearch() {
-        // Get the selected image
-        const selectedImage = document.querySelector('input[name="galleryRadio"]:checked');
+    // Get the selected image
+    const selectedImage = document.querySelector('input[name="galleryRadio"]:checked');
 
-        if (!selectedImage) {
-            alert("Please select an image first.");
-            return;
-        }
-
-        const galleryTitle = selectedImage.parentElement.querySelector('.gallery-title').textContent;
-        // Assuming the format is 'Category: [CATEGORY] | Score: [SCORE]'
-        const categoryName = galleryTitle.split('|')[0].replace('Category: ', '').trim();
-
-        // Now, use this category name to search similar images within the specific model using the uploaded image
-
-        // Using FormData to send image and category
-        const formData = new FormData();
-        formData.append('csrfmiddlewaretoken', csrftoken);
-        formData.append('image', document.getElementById('fileInput').files[0]);
-        formData.append('category', categoryName);
-
-        fetch('/api/search', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': csrftoken,
-                'Accept': 'application/json',
-            },
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            const galleryContainer = document.querySelector('.d-flex.flex-wrap.justify-content-between');
-            galleryContainer.innerHTML = ''; // Clear current images
-            
-            data.similar_images.forEach(imgData => {
-                const galleryItem = document.createElement('div');
-                galleryItem.classList.add('gallery-item', 'mb-2', 'position-relative');
-                
-                const imgElement = document.createElement('img');
-                imgElement.addEventListener('click', function() {
-                    showModalWithImage(imgElement.src);
-                });
-                imgElement.src = imgData[0].replace('\\\\', '/'); // Assuming this is the image path
-                imgElement.alt = 'Similar Image';
-                
-                const radioButton = document.createElement('input');
-                radioButton.type = 'radio';
-                radioButton.classList.add('radio-button');
-                radioButton.name = 'galleryRadio';
-                
-                const galleryTitle = document.createElement('div');
-                galleryTitle.classList.add('gallery-title');
-                // Extract category from the image path
-                const category = imgData[0].split('\\')[3];
-                galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
-                
-                
-                galleryItem.appendChild(imgElement);
-                galleryItem.appendChild(radioButton);
-                galleryItem.appendChild(galleryTitle);
-                
-                galleryContainer.appendChild(galleryItem);
-            });
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
+    if (!selectedImage) {
+        alert("Please select an image first.");
+        return;
     }
+
+    const galleryTitle = selectedImage.parentElement.querySelector('.gallery-title').textContent;
+    const categoryName = galleryTitle.split('|')[0].replace('Category: ', '').trim();
+
+    // Disable the detail search button
+    document.getElementById('detailSearchButton').disabled = true;
+
+    // Using FormData to send image and category
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', csrftoken);
+    formData.append('image', document.getElementById('fileInput').files[0]);
+    formData.append('category', categoryName);
+
+    fetch('/api/search', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'Accept': 'application/json',
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        const galleryContainer = document.querySelector('.d-flex.flex-wrap.justify-content-between');
+        galleryContainer.innerHTML = ''; // Clear current images
+        
+        data.similar_images.forEach(imgData => {
+            const galleryItem = document.createElement('div');
+            galleryItem.classList.add('gallery-item', 'mb-2', 'position-relative');
+            
+            const imgElement = document.createElement('img');
+            imgElement.addEventListener('click', function() {
+                showModalWithImage(imgElement.src);
+            });
+            imgElement.src = imgData[0].replace('\\\\', '/'); // Assuming this is the image path
+            imgElement.alt = 'Similar Image';
+            
+            const radioButton = document.createElement('input');
+            radioButton.type = 'radio';
+            radioButton.classList.add('radio-button');
+            radioButton.name = 'galleryRadio';
+            
+            const galleryTitle = document.createElement('div');
+            galleryTitle.classList.add('gallery-title');
+            const category = imgData[0].split('/')[3];
+            galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
+            
+            galleryItem.appendChild(imgElement);
+            galleryItem.appendChild(radioButton);
+            galleryItem.appendChild(galleryTitle);
+            
+            galleryContainer.appendChild(galleryItem);
+        });
+
+        // Re-enable the detail search button
+        document.getElementById('detailSearchButton').disabled = false;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        // Re-enable the detail search button if there's an error
+        document.getElementById('detailSearchButton').disabled = false;
+    });
+}
 
     function showPreview(input) {
         const file = input.files[0];
@@ -224,6 +227,9 @@
         formData.append('csrfmiddlewaretoken', csrftoken);
         formData.append('image', document.getElementById('fileInput').files[0]);
         formData.append('category', document.querySelector('select[name="category"]').value);
+
+        // Disable the search button
+        document.getElementById('searchButton').disabled = true;
 
         fetch('/api/search', {
             method: 'POST',
@@ -260,7 +266,6 @@
                 const category = imgData[0].split('/')[3];
                 galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
                 
-                
                 galleryItem.appendChild(imgElement);
                 galleryItem.appendChild(radioButton);
                 galleryItem.appendChild(galleryTitle);
@@ -268,11 +273,17 @@
                 galleryContainer.appendChild(galleryItem);
             });
 
+            // Re-enable the search button
+            document.getElementById('searchButton').disabled = false;
+
         })
-    .catch(error => {
-        console.error('Error:', error);
-    });
+        .catch(error => {
+            console.error('Error:', error);
+            // Re-enable the search button if there's an error
+            document.getElementById('searchButton').disabled = false;
+        });
     }
+
 </script>
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
