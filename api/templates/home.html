@@ -252,7 +252,7 @@
                 imgElement.addEventListener('click', function() {
                     showModalWithImage(imgElement.src);
                 });
-                imgElement.src = imgData[0].replace('\\\\', '/'); // Assuming this is the image path
+                imgElement.src = imgData.replace('\\\\', '/'); // Assuming this is the image path
                 imgElement.alt = 'Similar Image';
                 
                 const radioButton = document.createElement('input');
@@ -263,8 +263,11 @@
                 const galleryTitle = document.createElement('div');
                 galleryTitle.classList.add('gallery-title');
                 // Extract category from the image path
-                const category = imgData[0].split('/')[3];
-                galleryTitle.textContent = 'Category: ' + category + ' | Score: ' + imgData[1];
+                console.log(imgData);
+                const category = imgData.split('/')[3];
+                console.log(category);
+
+                galleryTitle.textContent = 'Category: ' + category;
                 
                 galleryItem.appendChild(imgElement);
                 galleryItem.appendChild(radioButton);

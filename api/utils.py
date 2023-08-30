@@ -1,23 +1,103 @@
 import csv
 import os
 from django.conf import settings
-import pickle
-from sklearn.metrics.pairwise import cosine_similarity
-from PIL import Image
+import torch
+import torchvision.models as models
 import torchvision.transforms as transforms
-import timm
-import numpy as np
+from PIL import Image
+import faiss
+import os
+import pickle
+from pathlib import Path
+class ImageSearch:
+    def __init__(self, dimension=2048):
+        self.dimension = dimension
+        print("Index Dimension:", dimension)  # Print the dimension for debugging
+        self.index = faiss.IndexFlatL2(dimension)
+        self.image_paths = []
 
-# Load pre-trained Vision Transformer
-model_name = 'vit_base_patch16_224'
-model = timm.create_model(model_name, pretrained=True)
-model.eval()
-#source /home/truckpartsasia/virtualenv/TruckImageSearch/3.10/bin/activate && cd /home/truckpartsasia/TruckImageSearch
-# Prepare the image transformation
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+        # Initialize pre-trained ResNet model + higher level layers
+        self.model = models.resnet50(pretrained=True)
+
+        # Remove final fully connected layer to get 2048 dimensional output
+        modules = list(self.model.children())[:-2]
+        self.model = torch.nn.Sequential(*modules)
+        
+        if torch.cuda.is_available():
+            self.model = self.model.cuda()
+        
+        self.model.eval()
+
+        self.transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+
+        ])
+    def save_all_index(self):
+        self.save_category_index("all")
+
+    def load_all_index(self):
+        if os.path.exists("all_faiss_index.pkl"):
+            self.load_category_index("all")
+        else:
+            self.create_empty_index()
+
+    def create_empty_index(self):
+        self.index = faiss.IndexFlatL2(self.dimension)
+        self.image_paths = []
+
+    def merge_category_into_all(self, category_name):
+        self.load_all_index()
+        category_searcher = ImageSearch()
+        category_searcher.load_category_index(category_name)
+        self.merge_with(category_searcher)
+        self.save_all_index()
+
+    def extract_features(self, image_path):
+        image = Image.open(image_path).convert("RGB")
+        tensor = self.transform(image).unsqueeze(0)
+        if torch.cuda.is_available():
+            tensor = tensor.cuda()
+        with torch.no_grad():
+            features = self.model(tensor)
+        
+        # Apply Global Average Pooling
+        features = features.mean([2, 3])
+        
+        return features.cpu().numpy()
+
+    def add_to_index(self, image_path):
+        image_path = str(Path(image_path).relative_to(settings.BASE_DIR))
+        feature = self.extract_features(image_path)
+        # print("Feature Shape:", feature.shape)  # Print the shape for debugging
+        self.index.add(feature)
+
+        self.image_paths.append(image_path)
+
+    def search(self, query_image_path, k=10):
+        query_feature = self.extract_features(query_image_path)
+        distances, indices = self.index.search(query_feature, k)
+
+        results = [self.image_paths[idx] for idx in indices[0]]
+        return results
+    def save_category_index(self, category_name):
+        index_path = f"{category_name}_faiss_index.pkl"
+        image_paths_path = f"{category_name}_image_paths.pkl"
+        faiss.write_index(self.index, index_path)
+        with open(image_paths_path, 'wb') as f:
+            pickle.dump(self.image_paths, f)
+
+    def load_category_index(self, category_name):
+        index_path = f"{category_name}_faiss_index.pkl"
+        image_paths_path = f"{category_name}_image_paths.pkl"
+        self.index = faiss.read_index(index_path)
+        with open(image_paths_path, 'rb') as f:
+            self.image_paths = pickle.load(f)   
+    def merge_with(self, another_searcher):
+        self.index.add(another_searcher.index.reconstruct_n(0, another_searcher.index.ntotal))
+        self.image_paths.extend(another_searcher.image_paths)
 
 
 def get_categories_from_csv():
@@ -55,46 +135,3 @@ def remove_category_from_csv(category):
             f.write(row + "\n")
 
     return True
-
-def process_image(img_path):
-    img = Image.open(img_path).convert('L')  # Convert to grayscale
-    img = img.resize((224, 224))  # Resize the image
-    img = np.array(img)  # Convert to numpy array
-    img = img / 255.0  # Normalize to [0, 1]
-    img = np.repeat(img[..., np.newaxis], 3, -1)  # Duplicate grayscale image to 3 channels
-    img = transform(img)  # Apply the transformation
-    return img
-
-def extract_features(model, img):
-    img = img.float()  # Convert input tensor to float
-    img = img.unsqueeze(0)  # Add batch dimension
-    features = model.forward_features(img)  # Extract features using Vision Transformer
-    return features.flatten().detach().numpy()
-
-
-# Function for similarity calculation
-def find_similar_images(query_img_path, img_features):
-    print(query_img_path)
-    query_img = process_image(query_img_path)
-    query_features = extract_features(model, query_img)
-
-    similarities = {}
-    for img_path, features in img_features.items():
-        similarity = cosine_similarity([query_features], [features])
-        similarities[img_path] = similarity[0][0]
-    
-    # Sort images by similarity score
-    sorted_similarities = sorted(similarities.items(), key=lambda item: item[1], reverse=True)
-    
-    return sorted_similarities
-
-def fn_search(model_name, query_image):
-    model_name = "models/"  +  model_name
-
-    model_path = os.path.join(settings.BASE_DIR, model_name)
-    # Load features from file
-    with open(model_path, 'rb') as f:
-        img_features = pickle.load(f)
-
-    similar_images = find_similar_images(query_image, img_features)
-    return similar_images[:10]

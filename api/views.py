@@ -21,6 +21,7 @@ class TrainView(View):
 
 class SearchView(View):
     def post(self, request):
+        searcher = ImageSearch()
         image = request.FILES.get('image')
         category = request.POST.get('category')
         print(category)
@@ -28,9 +29,10 @@ class SearchView(View):
         default_storage.save(path, ContentFile(image.read()))
         
         try:
-            similar_images = fn_search(category+".pkl", path)
+            searcher.load_category_index(category)
+            similar_images = searcher.search(path)
             # Convert float scores to strings
-            similar_images_serializable = [(img, str(score)) for img, score in similar_images]
+            similar_images_serializable = [img for img in similar_images]
             print(similar_images_serializable)
             response_data = {
                 "similar_images": similar_images_serializable
@@ -84,12 +86,12 @@ class DeleteCategoryView(View):
         
 class TrainImageView(View):
     def post(self, request):
+        searcher = ImageSearch()
         models_dir = os.path.join(settings.BASE_DIR, 'models')
         if not os.path.exists(models_dir):
             os.makedirs(models_dir)
         category = request.POST.get('categorySelect')
         upload_files = request.FILES.getlist('files')
-        uploaded_images = []
         for upload_file in upload_files:
             path = os.path.join(settings.MEDIA_ROOT, 'ImageSearch', 'train_datasets', category, upload_file.name)
             os.makedirs(os.path.dirname(path), exist_ok=True)  # Create parent directories if they don't exist
@@ -97,33 +99,8 @@ class TrainImageView(View):
             if default_storage.exists(path):
                 default_storage.delete(path)
             default_storage.save(path, ContentFile(upload_file.read()))
-            uploaded_images.append(path)
-
-        img_features = {}
-        model_path = os.path.join(settings.BASE_DIR, 'models', category+".pkl")
-        if os.path.exists(model_path):
-            with open(model_path, 'rb') as f:
-                img_features = pickle.load(f)
-        
-        for img_path in uploaded_images:
-            img = process_image(img_path)
-            features = extract_features(model, img)
-            rel_path = str(Path(img_path).relative_to(settings.BASE_DIR))
-            img_features[rel_path] = features
-        with open(model_path, 'wb') as f:
-            pickle.dump(img_features, f)
-
-        merged_model_file = os.path.join(settings.BASE_DIR, 'models', "All.pkl")
-        all_features = {}
-        if os.path.exists(merged_model_file):
-            with open(merged_model_file, 'rb') as f:
-                all_features = pickle.load(f)
-        else:
-            all_features = {}
-
-
-        all_features.update(img_features)
-        with open(merged_model_file, 'wb') as f:
-            pickle.dump(all_features, f) 
-
+            searcher.add_to_index(path)
+            searcher.save_category_index(category)
+        searcher = ImageSearch()
+        searcher.merge_category_into_all(category)
         return JsonResponse({"message": "success"})
